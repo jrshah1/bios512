@@ -4,5 +4,7 @@ install.packages("IRkernel", dependencies = TRUE)
 install.packages("shiny", dependencies = TRUE)
 install.packages("readr", dependencies = TRUE)
 install.packages("skimr", dependencies = TRUE)
+install.packages("Rtsne", dependencies = TRUE)
+
 
 IRkernel::installspec(user = FALSE)
