@@ -1,0 +1,177 @@
+---
+title: "Final Project - Jeeya Shah"
+output: html_document
+---
+
+1. The data set that I selected was the Vaccination Coverage for Adolescents (13-17) specific to North Carolina from years 2008 to 2024. This data set was grouped from the larger overall CDC Vaccination Coverage data for all U.S. States. 
+- The columns of this data set are: vaccine, dose, geography type, geography, survey year, dimension type, dimenstion, estimate (%), the 95% confidence interval, and sample size. 
+- Geography indicates the specific state, which in this data is NC. 
+- There is 391 data points with 10 total variables as indicated by the columns and the data was collected from the National Immunization Survey for Teens.
+
+2. 
+```{r}
+#| label: load-packages
+#| message: false
+#| warning: false
+
+library(tidyverse)
+library(knitr)
+library(tidymodels)
+
+vaccine <- read_csv("NC_Vaccination_adolescent.csv")
+
+
+vacc_clean <- vaccine %>%
+  # rename to simpler names
+  rename(
+    year = `Survey Year`,
+    vaccine = `Vaccine/Sample`,
+    estimate = `Estimate (%)`,
+    size = `Sample Size`,
+    type = `Dimension Type`
+  ) %>%
+mutate(estimate = as.numeric(estimate)) %>%
+filter(type == "Age") #filter to only have age dimension
+
+```
+
+Visualization 1
+```{r}
+library(ggplot2)
+library(dplyr)
+
+ggplot(vacc_clean, aes(x = year, y = estimate, color = vaccine), group = vaccine) +
+  geom_point(size = 2) +               
+  labs(
+    title = "Yearly Percentage Estimate of Vaccination",
+    x = "Year",
+    y = "Estimate (%)"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 8))
+
+```
+
+Visualization 2+3
+```{r}
+vax_na <- vacc_clean %>%
+  drop_na(estimate, size)
+
+vacc_pca <- vax_na %>%
+  select(estimate, size)
+
+vacc_pca <- vacc_pca %>% drop_na()
+vacc_scaled <- scale(vacc_pca)
+
+pca <- prcomp(vacc_scaled, center = TRUE, scale. = TRUE)
+summary(pca)
+
+vax_pca <- bind_cols(as_tibble(pca$x), vax_na)
+
+ggplot(vax_pca, aes(x = PC1, y = PC2)) +
+  geom_point(size = 2, alpha = 0.7) +
+  theme_minimal() +
+  labs(title = "PCA of Adolescent Vaccine Estimates",
+       x = "PC1",
+       y = "PC2")
+
+ggplot(vax_pca, aes(x = PC1, y = PC2)) +
+  geom_point(alpha = 0.7, size = 1, color = "steelblue") +
+  facet_wrap(~ vaccine) +
+  theme_minimal() +
+  labs(
+    title = "PCA of Adolescent Vaccine Estimates by Vaccine",
+    x = "PC1",
+    y = "PC2"
+  )
+```
+
+
+Visualization 4
+```{r}
+#filter for year
+vax_year <- vacc_clean %>%
+  filter(year == 2024)
+
+
+ggplot(vax_year, aes(x = vaccine, y = size, fill = vaccine)) +
+  geom_col() +
+  coord_flip() +   
+  labs(
+    title = "Vaccine Survey Sample Size Among Adolescents in 2024",
+    x = "Vaccine",
+    y = "Sample Size"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+
+Visualization 5
+```{r}
+
+
+vax_ci_sep <- vax_year %>%
+  separate(`95% CI (%)`, into = c("lower", "upper"), sep = " to ") %>%
+  mutate(
+    lower = as.numeric(lower),
+    upper = as.numeric(upper),
+    estimate = as.numeric(estimate)
+  )
+
+
+ggplot(vax_ci_sep, aes(x = vaccine, y = estimate, color = vaccine)) +
+  geom_point(size = 2) +
+  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2) +
+  theme_minimal() +
+  labs(
+    title = "Vaccination Coverage with 95% CI",
+    x = "Survey Year",
+    y = "Coverage (%)"
+  )
+```
+
+Visualization 6
+```{r}
+vax_ci <- vacc_clean %>%
+  separate(`95% CI (%)`, into = c("lower", "upper"), sep = " to ") %>%
+  mutate(
+    lower = as.numeric(lower),
+    upper = as.numeric(upper),
+    estimate = as.numeric(estimate)
+  )
+
+vax_clust <- vax_ci %>%
+  select(estimate, lower, upper, size) %>%
+  na.omit()
+cluster_scaled <- scale(vax_clust)
+
+set.seed(123)
+k <- 3  # or whatever number of clusters you picked
+km_res <- kmeans(cluster_scaled, centers = k, nstart = 25)
+
+vax_clustered <- vax_ci %>%
+  filter(!is.na(estimate)) %>%   # make sure same rows as used for clustering
+  mutate(cluster = km_res$cluster)
+
+ggplot(vax_clustered, aes(x = year, y = estimate, color = factor(cluster))) +
+  geom_point() +
+  labs(color = "Cluster", title = "Clusters of Coverage Trends by Vaccine") +
+  theme_minimal()
+```
+
+3.
+Within this project, I completed PCA and K-Means Clustering as well as the visualization of different data points like the confidence intervals, sample sizes, and overall estimates. 
+
+- It is important to note how the inclusion of Varicella with a Dose type of "History of Disease" does impact the data which is show in the error bar chart (visualization 5) with the low pink bar and also the low pink points in the scatter plot in visualization 1. This indication may impact the overall results as they are far from the other points and this was one of the only vaccines that had this dosing type specified. 
+
+- From the completed dimensionality reduction, the primary PCA does not seem to indicate much other than a major cluster around PC1 = 1 and PC2 = 0. However, when this is broken down by vaccine in visualization 3, we can see that some of the vaccines like >2 Doses MMR or >3 Doses HPV have very distinct clusters. This indicates that these variables may be influencing the main PCA analysis done.
+
+- From the cluster analysis completed in Visualization 6, we can see that there are some distinct clusters once again, especially 1 and 2 which are pretty close together and have similar estimates for all years. 
+
+- Some things I might do next are see how this data can be used more for prediction for future vaccination statues of adolescents. Especially since the HPV vaccine was newly introduced, these are important for herd immunity which requires a high estimate/actual percentage of vaccination. 
+
+- I question how the clustering from PCA of menACWY (meningococcal) is different as compared to MMR or HPV and how the different dose presentations impact this. This may be impacted by commonality of getting this vaccine and how this vaccine is typically given to teenagers, who may or may not decide to receive it upon their own will unlike other vaccines like MMR which are given during childhood so parents would likely make the decisions. 
+
+- Another question I have is why the sample sizes, as seen in visualization 4, are so vastly different. I would look more into this with a more thorough analysis by breaking down the dose type of Varicella and HPV, however, I believe this would be due to the way the survey/data collection may have occurred, especially due to the specific dosing of >1, >2, etc of each vaccine which could be impacted by whether participants knew these specific numbers. 
+
